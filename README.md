@@ -8,6 +8,7 @@ Reusable AI coding agent skills in [Agent Skills](https://agentskills.io) format
 |-------|-------------|
 | [conventional-commits](skills/conventional-commits/) | Git commit message format following Conventional Commits spec |
 | [hyperf-backend](skills/hyperf-backend/) | Hyperf microservice code generation with DDD, Clean Architecture, Kafka |
+| [yaak](skills/yaak/) | Yaak API client CLI management (workspaces, folders, requests, envs) |
 
 ## Install
 
