@@ -11,10 +11,15 @@ Reusable AI coding agent skills in [Agent Skills](https://agentskills.io) format
 
 ## Install
 
+[skills.sh](https://skills.sh) compatible. Install via the [skills CLI](https://github.com/vercel-labs/skills):
+
 ```bash
-# One skill at a time
-npx skills add AdiPP/skills@skills/conventional-commits
-npx skills add AdiPP/skills@skills/hyperf-backend
+# Install a specific skill
+npx skills add AdiPP/skills@skills --skill conventional-commits
+npx skills add AdiPP/skills@skills --skill hyperf-backend
+
+# List available skills
+npx skills add AdiPP/skills --list
 ```
 
 ## Structure
