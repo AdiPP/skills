@@ -57,7 +57,9 @@ namespace {ProjectName}\{Domain}\Model;
 
 use Hyperf\Database\Model\Concerns\HasUuids;
 use Hyperf\Stringable\Str;
+use Menumbing\Orm\Contract\HasDomainEventInterface;
 use Menumbing\Orm\Model;
+use Menumbing\Orm\Trait\HasDomainEvent;
 
 /**
  * @property string $id
@@ -66,9 +68,9 @@ use Menumbing\Orm\Model;
  * @property \Carbon\Carbon $createdAt
  * @property \Carbon\Carbon $updatedAt
  */
-class {Name} extends Model
+class {Name} extends Model implements HasDomainEventInterface
 {
-    use HasUuids;
+    use HasUuids, HasDomainEvent;
 
     protected ?string $table = '{table_name}';
 
@@ -83,6 +85,572 @@ class {Name} extends Model
         // set properties...
 
         return $static;
+    }
+
+    public function patch(/* fields */): void
+    {
+        $this->name = $name;
+        $this->status = $status;
+        // partial update — never resets unmentioned fields
+    }
+}
+```
+
+---
+
+## Finder
+
+Naming: `{Entity}Finder` — read-only lookup layer between Service and Repository. Always `readonly class`, always `findOrFail` (never nullable).
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Finder;
+
+use Hyperf\Database\Model\ModelNotFoundException;
+use Hyperf\Di\Annotation\Inject;
+use Menumbing\Orm\Model;
+use {ProjectName}\{Domain}\Model\{Name};
+use {ProjectName}\{Domain}\Repository\{Name}Repository;
+
+readonly class {Name}Finder
+{
+    #[Inject]
+    protected {Name}Repository $repository;
+
+    public function findOrFail(string $id): Model | {Name}
+    {
+        if (null !== $model = $this->repository->findById($id)) {
+            return $model;
+        }
+
+        throw new ModelNotFoundException(
+            sprintf('{Name} with id \'%s\' not found.', $id)
+        );
+    }
+
+    public function findBy{Field}OrFail(string $value): Model | {Name}
+    {
+        if (null !== $model = $this->repository->findOneBy(['{field}' => $value])) {
+            return $model;
+        }
+
+        throw new ModelNotFoundException(
+            sprintf('{Name} with {field} \'%s\' not found.', $value)
+        );
+    }
+}
+```
+
+---
+
+## Consumed Event (Inbound Kafka)
+
+Service consumes external Kafka events via `#[ConsumedEvent]`. Use abstract base classes for event families sharing the same payload shape.
+
+### Abstract Base Event
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Event\{SubDomain}\{EventFamily};
+
+readonly abstract class Abstract{EventFamily}Event
+{
+    public function __construct(
+        public string $platformId,
+        public array  $entity,
+    ) {}
+
+    abstract public function getStatus(): string;
+}
+```
+
+### Concrete Consumed Event
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Event\{SubDomain}\{EventFamily};
+
+use Menumbing\EventStream\Annotation\ConsumedEvent;
+
+#[ConsumedEvent(
+    stream: '{sub-domain}.{entity}-events',
+    name  : '{sub-domain}.{entity}.{action}',
+)]
+readonly class {Entity}{Action} extends Abstract{EventFamily}Event
+{
+}
+```
+
+### Consumed Event Resolver
+
+Utility to reflect `#[ConsumedEvent]` metadata at runtime:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Shared\EventStream;
+
+use Menumbing\EventStream\Annotation\ConsumedEvent;
+use ReflectionClass;
+
+class ConsumedEventResolver
+{
+    public static function getMetadata(string $class): ?ConsumedEvent
+    {
+        $reflection = new ReflectionClass($class);
+        $attributes = $reflection->getAttributes(ConsumedEvent::class);
+
+        return $attributes[0]?->newInstance();
+    }
+
+    public static function getName(string $class): ?string
+    {
+        return self::getMetadata($class)?->name;
+    }
+
+    public static function getStream(string $class): ?string
+    {
+        return self::getMetadata($class)?->stream;
+    }
+}
+```
+
+### Consumed Event Listener
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Listener\{SubDomain};
+
+use Hyperf\Di\Annotation\Inject;
+use Hyperf\Event\Annotation\Listener;
+use Hyperf\Event\Contract\ListenerInterface;
+use Psr\Container\ContainerInterface;
+use {ProjectName}\{Domain}\Event\{SubDomain}\{EventFamily}\{Entity}{Action};
+use {ProjectName}\{Domain}\Finder\{Entity}Finder;
+use {ProjectName}\{Domain}\Repository\{Entity}Repository;
+use {ProjectName}\{Domain}\Service\{Name}\{Name}{Suffix};
+
+#[Listener]
+class {Entity}{Action}Listener implements ListenerInterface
+{
+    #[Inject]
+    protected ContainerInterface $container;
+
+    public function listen(): array
+    {
+        return [{Entity}{Action}::class];
+    }
+
+    public function process(object $event): void
+    {
+        if (!$event instanceof {Entity}{Action}) {
+            return;
+        }
+
+        $service = $this->container->get({Name}{Suffix}::class);
+        $finder = $this->container->get({Entity}Finder::class);
+        $repository = $this->container->get({Entity}Repository::class);
+
+        // Find client/entity by platform_id from event, return early if null
+        // Create domain object via service
+        // Map payload from event to DTO
+    }
+
+    private function mapPayload({Entity}{Action} $event): array
+    {
+        return [
+            'id'     => $event->entity['id'],
+            'status' => $event->getStatus(),
+            // map fields from event payload
+        ];
+    }
+}
+```
+
+---
+
+## Error Handling
+
+### ErrorInterface
+
+Domain exceptions implement this interface for structured error responses:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Exception;
+
+use BackedEnum;
+use Throwable;
+
+interface ErrorInterface extends Throwable
+{
+    public function getError(): string|BackedEnum;
+    public function getHint(): ?string;
+}
+```
+
+### Domain Exception
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Exception\{SubDomain};
+
+use {ProjectName}\{Domain}\Constant\ErrorCode;
+use {ProjectName}\{Domain}\Exception\ErrorInterface;
+
+class {Entity}NotFoundException extends \RuntimeException implements ErrorInterface
+{
+    public function __construct(string $identifier)
+    {
+        parent::__construct(sprintf('{Name} with id \'%s\' not found.', $identifier));
+    }
+
+    public function getError(): string|BackedEnum
+    {
+        return ErrorCode::NOT_FOUND;
+    }
+
+    public function getHint(): ?string
+    {
+        return 'Check the identifier and try again.';
+    }
+}
+```
+
+### ErrorResource
+
+Renders RFC-compliant JSON error responses:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Resource;
+
+use Hyperf\Resource\Json\JsonResource;
+use {ProjectName}\{Domain}\Constant\ErrorCode;
+use {ProjectName}\{Domain}\Exception\ErrorInterface;
+use BackedEnum;
+use Throwable;
+
+class ErrorResource extends JsonResource
+{
+    public ?string $wrap = null;
+
+    public function __construct(ErrorInterface|Throwable $resource)
+    {
+        parent::__construct($resource);
+    }
+
+    public function toArray(): array
+    {
+        $code = $this->getStatusCode();
+
+        return array_filter([
+            'error'               => $this->getError($this->resource),
+            'error_description'   => $this->resource->getMessage(),
+            'code'                => $code,
+            'hint'                => $this->resource instanceof ErrorInterface ? $this->resource->getHint() : null,
+            'debug'               => $this->getDebugInfo(),
+        ]);
+    }
+
+    public function getStatusCode(): int
+    {
+        return match (true) {
+            $this->resource instanceof \Hyperf\Validation\ValidationException => 422,
+            $this->resource instanceof \HyperfExtension\Auth\Exceptions\AuthenticationException => 401,
+            $this->resource instanceof \HyperfExtension\Auth\Exceptions\AuthorizationException => 403,
+            $this->resource instanceof \Hyperf\HttpMessage\Exception\HttpException => $this->resource->getStatusCode(),
+            default => 500,
+        };
+    }
+
+    protected function getError(ErrorInterface|Throwable $error): string|BackedEnum
+    {
+        return match (true) {
+            $error instanceof ErrorInterface => $error->getError(),
+            default => ErrorCode::INTERNAL_ERROR,
+        };
+    }
+}
+```
+
+### AppExceptionHandler
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Exception\Handler;
+
+use Hyperf\ExceptionHandler\ExceptionHandler;
+use {ProjectName}\{Domain}\Resource\ErrorResource;
+use Swow\Psr7\Message\ResponsePlusInterface;
+use Throwable;
+
+class AppExceptionHandler extends ExceptionHandler
+{
+    public function handle(Throwable $throwable, ResponsePlusInterface $response)
+    {
+        $this->stopPropagation();
+
+        $resource = new ErrorResource($throwable);
+
+        return $resource
+            ->toResponse()
+            ->withStatus($resource->getStatusCode());
+    }
+
+    public function isValid(Throwable $throwable): bool
+    {
+        return true;
+    }
+}
+```
+
+Exception handler chain (priority order in `exceptions.php`):
+1. `RespondTraceIdExceptionHandler` — attaches trace ID to response
+2. `OAuth2ServerExceptionHandler` — OAuth2-specific errors
+3. `AppExceptionHandler` — catch-all for all remaining throwables
+
+---
+
+## Custom Auth Guard (e.g., Authentik JWKS)
+
+When the service authenticates against an external IdP with JWKS:
+
+### Guard
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Auth\{Provider};
+
+use Firebase\JWT\JWT;
+use Firebase\JWT\JWK;
+use Hyperf\HttpServer\Contract\RequestInterface;
+use HyperfExtension\Auth\Contracts\AuthenticatableInterface;
+use HyperfExtension\Auth\Contracts\GuardInterface;
+use HyperfExtension\Auth\GenericUser;
+
+class {Provider}Guard implements GuardInterface
+{
+    private ?AuthenticatableInterface $user = null;
+
+    public function __construct(
+        protected RequestInterface $request,
+        protected {Provider}JwksFetcher $jwksFetcher,
+    ) {}
+
+    public function check(): bool { return $this->user() !== null; }
+    public function guest(): bool { return $this->user() === null; }
+    public function id(): mixed { return $this->user()?->getAuthIdentifier(); }
+
+    public function user(): ?AuthenticatableInterface
+    {
+        if ($this->user !== null) {
+            return $this->user;
+        }
+
+        $token = $this->extractBearerToken();
+        if ($token === null) {
+            return null;
+        }
+
+        $claims = $this->validateAndParseClaims($token);
+        $this->user = new GenericUser($claims);
+
+        return $this->user;
+    }
+
+    public function validate(array $credentials = []): bool { return $this->user() !== null; }
+    public function setUser(AuthenticatableInterface $user): static { $this->user = $user; return $this; }
+
+    private function extractBearerToken(): ?string { /* extract from Authorization header */ }
+    private function validateAndParseClaims(string $rawToken): array { /* JWT decode via JWKS */ }
+}
+```
+
+### JWKS Fetcher (with caching)
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Auth\{Provider};
+
+use FriendsOfHyperf\Cache\Facade\Cache;
+use GuzzleHttp\ClientInterface;
+
+class {Provider}JwksFetcher
+{
+    private const CACHE_KEY = '{provider}_jwks';
+
+    public function __construct(
+        protected ClientInterface $httpClient,
+        protected string $jwksUrl,
+        protected int $cacheTtl = 3600,
+    ) {}
+
+    public function getKey(string $kid): array
+    {
+        $jwks = $this->fetchCached();
+        foreach ($jwks['keys'] ?? [] as $key) {
+            if (($key['kid'] ?? null) === $kid) {
+                return $key;
+            }
+        }
+        // Key not found — refresh cache once (key rotation)
+        $jwks = $this->fetch();
+        foreach ($jwks['keys'] ?? [] as $key) {
+            if (($key['kid'] ?? null) === $kid) {
+                return $key;
+            }
+        }
+        throw new \RuntimeException("JWK not found for kid: {$kid}");
+    }
+
+    private function fetchCached(): array
+    {
+        return Cache::store('memory')->remember(self::CACHE_KEY, $this->cacheTtl, fn () => $this->fetch());
+    }
+
+    private function fetch(): array { /* HTTP GET + cache set */ }
+}
+```
+
+### Factory
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Factory;
+
+use GuzzleHttp\Client;
+use Hyperf\Contract\ConfigInterface;
+use Psr\Container\ContainerInterface;
+use {ProjectName}\{Domain}\Auth\{Provider}\{Provider}Guard;
+use {ProjectName}\{Domain}\Auth\{Provider}\{Provider}JwksFetcher;
+
+class {Provider}GuardFactory
+{
+    public function __invoke(ContainerInterface $container): {Provider}Guard
+    {
+        $config = $container->get(ConfigInterface::class);
+
+        $jwksFetcher = new {Provider}JwksFetcher(
+            httpClient: new Client(),
+            jwksUrl   : $config->get('{provider lowercase}.jwks_url'),
+            cacheTtl  : $config->get('{provider lowercase}.jwks_cache_ttl', 3600),
+        );
+
+        return new {Provider}Guard(
+            request    : $container->get(RequestInterface::class),
+            jwksFetcher: $jwksFetcher,
+        );
+    }
+}
+```
+
+Wiring in `dependencies.php`:
+```php
+return [
+    {ProjectName}\{Domain}\Auth\{Provider}\{Provider}Guard::class
+        => {ProjectName}\{Domain}\Factory\{Provider}GuardFactory::class,
+];
+```
+
+---
+
+## JsonResourceStrategy Override
+
+Exclude `Throwable` from default resource serialization so exceptions route to `ErrorResource` instead:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Resource;
+
+use Menumbing\Resource\Strategy\JsonResourceStrategy as MenumbingJsonResourceStrategy;
+use Throwable;
+
+class JsonResourceStrategy extends MenumbingJsonResourceStrategy
+{
+    public function supports(mixed $resource): bool
+    {
+        return !$this->getOrigin($resource) instanceof Throwable;
+    }
+}
+```
+
+---
+
+## Console Command
+
+Naming: `{Action}{Entity}Console` — thin wrapper over `HyperfCommand` for interactive or scripted CLI operations.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace {ProjectName}\{Domain}\Console;
+
+use Hyperf\Command\Annotation\Command;
+use Hyperf\Command\Command as HyperfCommand;
+use Hyperf\Di\Annotation\Inject;
+use Symfony\Component\Console\Input\InputArgument;
+
+#[Command]
+class {Action}{Entity}Console extends HyperfCommand
+{
+    protected ?string $name = '{entity}:{action}';
+
+    #[Inject]
+    protected {Entity}Repository $repository;
+
+    public function handle(): void
+    {
+        $id = $this->input->getArgument('id');
+        // perform action...
+        $this->output->success('Done.');
+    }
+
+    protected function getArguments(): array
+    {
+        return [
+            ['id', InputArgument::REQUIRED, 'The id of the {entity}'],
+        ];
     }
 }
 ```

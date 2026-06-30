@@ -65,10 +65,12 @@ src/
 ├── Command/             # CLI commands (sync, scheduler, batch)
 ├── Constant/            # Enums and constants
 ├── Controller/          # Rare, for complex auth flows
+├── Console/             # Simple CLI command wrappers (thin over HyperfCommand)
 ├── DTO/                 # Data Transfer Objects (per module)
-├── Event/               # Domain Events with ProducedEvent annotation
+├── Event/               # Domain Events: ProducedEvent (outbound) and ConsumedEvent (inbound) annotations
 ├── Exception/           # Custom exceptions + Handler/
 ├── Factory/             # DI factories (e.g., HttpClient construction)
+├── Finder/              # Read-only model lookups (findOrFail pattern)
 ├── HttpClient/          # Outbound HTTP clients per upstream (one folder per service)
 ├── Job/                 # Async queue jobs (when extending Hyperf\AsyncQueue\Job)
 ├── Listener/            # Event listeners (also async queue handlers via #[AsyncQueueMessage])
@@ -95,9 +97,9 @@ For full code templates, see [references/patterns.md](references/patterns.md).
 | Repository | `{Name}Repository` — annotated with `#[AsRepository]` | `src/Repository/` |
 | Domain Service | `{Name}{Suffix}` — `final class`, one method, `#[Transactional]` | `src/Service/{Name}/` |
 | DTO | `{Action}{Name}DTO` — `readonly` properties, one per use case | `src/DTO/` |
-| Domain Event | `{Entity}{Action}` — `#[ProducedEvent]` annotation, Kafka stream | `src/Event/` |
-| Event Listener | `{Name}Listener` — `#[Listener]`, processes domain events | `src/Listener/` |
-| Form Request | `{Action}{Name}Request` — validation rules | `src/Request/` |
+| Domain Event (Produced) | `{Entity}{Action}` — `#[ProducedEvent]` annotation, Kafka stream | `src/Event/` |
+| Consumed Event | `{Action}{Entity}` — `#[ConsumedEvent]` annotation, inbound Kafka | `src/Event/{Domain}/` |
+| Finder | `{Entity}Finder` — `readonly class`, `findOrFail()` lookups | `src/Finder/` |
 | Migration | UUID primary key, `datetimes()`, `softDeletes()` | `migrations/` |
 | Cache Key | `{Name}Key::generate()` — prefixed with `{project_name}:` | `src/Cache/` |
 
@@ -145,6 +147,51 @@ Each relation lives in its own trait under `src/Relation/{Related}/`:
 - `BelongsToMany{Related}sTrait` — plural: `{related}s()`
 - `MorphTo` — inline on polymorphic owner model (not a trait)
 
+### Finder
+
+Read-only lookup layer between Service and Repository. Always `readonly class`, always `findOrFail` (never nullable).
+- Naming: `{Entity}Finder`
+- Multiple lookup methods: `findOrFail($id)`, `findBy{Field}OrFail($value)`
+- Throws `ModelNotFoundException` → handled by exception pipeline
+
+### Consumed Event (Inbound Kafka)
+
+Service consumes external Kafka events via `#[ConsumedEvent]`. Use abstract base classes for event families:
+- Abstract base: shared constructor fields for a family of events
+- Concrete event: adds `#[ConsumedEvent(stream: '...', name: '...')]` annotation
+- Listener: `#[Listener]`, resolves services via `$this->container->get()`, maps payload
+- `ConsumedEventResolver` utility reflects `#[ConsumedEvent]` metadata at runtime
+
+### Error Handling
+
+Three-layer error system:
+- `ErrorInterface` — domain exceptions implement `getError(): string|BackedEnum` + `getHint(): ?string`
+- `ErrorResource` — renders RFC-compliant JSON: `{ error, error_description, code, hint, fails, debug }`
+- `AppExceptionHandler` — catch-all handler wraps any `Throwable` in `ErrorResource`
+- Exception handler chain (priority): `RespondTraceIdHandler → OAuth2ServerExceptionHandler → AppExceptionHandler`
+
+### Custom Auth Guard
+
+When the service needs a custom guard (e.g., external IdP like Authentik):
+- Implement `GuardInterface` with token validation logic
+- Create a Factory class (`{Guard}Factory`) registered in `dependencies.php`
+- Config in `config/autoload/{guard_name}.php` (env-backed)
+- Factory reads config via `ConfigInterface::get()`, never `env()`
+
+### Testing
+
+- **Framework**: Pest 2.x on PHPUnit 10
+- **Base class**: `Tests\TestCase` with `MakesHttpRequests`, `RunTestsInCoroutine`, `InteractsWithDatabase`
+- **Database**: SQLite in-memory, auto-migration at `test/bootstrap.php`
+- **Directories**: `test/Feature/` (HTTP/integration), `test/Unit/`
+- **Conventions**: `test('description', function () { ... })`, `#[Group('name')]` attributes
+
+### Specs (Optional)
+
+For complex features, write an implementation spec in `specs/` before coding:
+- `{date}-{feature-slug}.md` — Overview, Consumed/Produced Events, Payload, File Changes, Out of Scope
+
+
 ---
 
 ## Config Templates
@@ -157,12 +204,17 @@ See [references/config-templates.md](references/config-templates.md) for full te
 - `opentracing.php` (menumbing/tracer)
 - `auth.php`, `oauth2_resource_server.php`
 - `middlewares.php`
+- `health_check.php` (menumbing/health-check)
+- `exceptions.php` (handler chain)
+- `authentik.php` (custom guard config)
+- `signature.php` (outbound request signing)
+- `crontab.php` (scheduled commands)
+- `serializer.php` (Symfony serializer)
+- `cors.php` (gokure/hyperf-cors)
+- `server.php` (Swoole server tuning)
 
 ---
-
-## Rules & Requirements
-
-See [references/rules.md](references/rules.md) for the full 31 rules and `composer.json` requirements.
+See [references/rules.md](references/rules.md) for the full rules and `composer.json` requirements.
 
 Key rules:
 - Always `declare(strict_types=1);`
@@ -172,3 +224,6 @@ Key rules:
 - All API endpoints prefixed with `/v1`
 - Cross-service communication only via Kafka events or API calls
 - **MANDATORY** `menumbing/graceful-process` in every service
+- **MANDATORY** `menumbing/health-check` in every service for K8s probes
+- Domain exceptions implement `ErrorInterface`; use `ErrorResource` for JSON responses
+- Use Finder for read-only lookups; never return nullable from lookup methods

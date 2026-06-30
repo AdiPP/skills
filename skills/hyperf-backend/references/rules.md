@@ -8,6 +8,7 @@
 "require": {
     "hyperf/hyperf": "~3.1.0",
     "hyperf/cache": "~3.1.0",
+    "hyperf/crontab": "^3.1",
     "hyperf/guzzle": "~3.1.0",
     "hyperf/redis": "~3.1.0",
     "hyperf/tracer": "~3.1.0",
@@ -16,8 +17,10 @@
     "menumbing/event-stream": "^1.0",
     "menumbing/resource": "^1.0",
     "menumbing/graceful-process": "^1.0",
+    "menumbing/health-check": "^1.0",
     "menumbing/async-queue": "^1.0",
     "menumbing/http-client": "^1.0",
+    "menumbing/signature": "^1.0",
     "menumbing/tracer": "^1.0",
     "menumbing/auth": "^1.0",
     "menumbing/oauth2-resource-server": "^1.0"
@@ -79,6 +82,11 @@ Without this package, Swoole will abruptly close connections on SIGTERM, causing
 26. Use stateless providers (`stateless_user`, `stateless_client`) when the service does NOT own the user/client aggregate; use model providers only in the Identity / aggregate-owner service
 27. Per-endpoint authorization is expressed via routing `options: ['scope' => '...']`, NOT inside the action body
 28. Inject the authenticated principal with `#[AuthUser(for: 'user'|'client', guards: [...])]` rather than fetching from the request manually
-29. Default token validator is `stateless` (local JWT). Switch to `api` only when revocation/introspection must be synchronous
-30. Each model relation lives in its own trait under `src/Relation/{Related}/`. Trait naming MUST encode the kind: `BelongsTo{Related}Trait`, `HasOne{Related}Trait`, `HasMany{Related}sTrait`, `BelongsToMany{Related}sTrait`. `MorphTo` is the only relation declared inline on the polymorphic owner model (not extracted to a trait)
-31. Scoped relation variants (e.g., `successful{Related}s()`, `enabled{Related}s()`) MUST chain `where(...)` on the base relation — never duplicate the relation definition
+29. Scoped relation variants (e.g., `successful{Related}s()`, `enabled{Related}s()`) MUST chain `where(...)` on the base relation — never duplicate the relation definition
+30. Default token validator is `stateless` (local JWT). Switch to `api` only when revocation/introspection must be synchronous
+31. Each model relation lives in its own trait under `src/Relation/{Related}/`. Trait naming MUST encode the kind: `BelongsTo{Related}Trait`, `HasOne{Related}Trait`, `HasMany{Related}sTrait`, `BelongsToMany{Related}sTrait`. `MorphTo` is the only relation declared inline on the polymorphic owner model (not extracted to a trait)
+32. **MANDATORY** `menumbing/health-check` in every service for Kubernetes liveness + readiness probes
+33. Domain exceptions implement `ErrorInterface` (`getError()` + `getHint()`); use `ErrorResource` for JSON error responses
+34. Consumed events use abstract base classes for event families sharing the same payload shape; concrete events add `#[ConsumedEvent]` annotation
+35. Use `Finder` for read-only lookups — always `readonly class`, always `findOrFail` (never nullable returns)
+36. Test directory is `test/` (not `tests/`); use Pest 2.x with `TestCase` base class; SQLite in-memory for database tests
