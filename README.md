@@ -8,6 +8,7 @@ Reusable AI coding agent skills in [Agent Skills](https://agentskills.io) format
 |-------|-------------|
 | [conventional-commits](skills/conventional-commits/) | Git commit message format following Conventional Commits spec |
 | [hyperf-backend](skills/hyperf-backend/) | Hyperf microservice code generation with DDD, Clean Architecture, Kafka |
+| [release](skills/release/) | Project-agnostic release workflow — version bump, changelog, MR/PR |
 | [yaak](skills/yaak/) | Yaak API client CLI management (workspaces, folders, requests, envs) |
 
 ## Install
@@ -18,6 +19,8 @@ Reusable AI coding agent skills in [Agent Skills](https://agentskills.io) format
 # Install a specific skill
 npx skills add AdiPP/skills@skills --skill conventional-commits
 npx skills add AdiPP/skills@skills --skill hyperf-backend
+npx skills add AdiPP/skills@skills --skill release
+npx skills add AdiPP/skills@skills --skill yaak
 
 # List available skills
 npx skills add AdiPP/skills --list
@@ -31,12 +34,16 @@ Each skill follows the [Agent Skills spec](https://agentskills.io/specification.
 skills/
 ├── conventional-commits/
 │   └── SKILL.md
-└── hyperf-backend/
-    ├── SKILL.md
-    └── references/
-        ├── patterns.md
-        ├── config-templates.md
-        └── rules.md
+├── hyperf-backend/
+│   ├── SKILL.md
+│   └── references/
+│       ├── patterns.md
+│       ├── config-templates.md
+│       └── rules.md
+├── release/
+│   └── SKILL.md
+└── yaak/
+    └── SKILL.md
 ```
 
 ## License
