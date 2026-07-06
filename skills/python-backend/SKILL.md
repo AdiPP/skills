@@ -13,15 +13,15 @@ When applying this skill, replace:
 
 | Placeholder | Format | Example |
 |-------------|--------|---------|
-| `{ProjectName}` | PascalCase — used in application/doc title | `Ewa`, `Loan`, `Payment` |
-| `{project-name}` | kebab-case — used in Kafka group, Docker names | `ewa-backend`, `loan-backend` |
+| `{ProjectName}` | PascalCase — used in application/doc title | `Blog`, `Shop`, `CMS` |
+| `{project-name}` | kebab-case — used in Kafka group, Docker names | `blog-api`, `shop-api` |
 | `{Domain}` | PascalCase — bounded context name | `Employer`, `OpenAccount`, `Withdrawal` |
 | `{Entity}` | PascalCase — entity / aggregate name | `Employer`, `Platform`, `DocumentTemplate` |
 | `{Action}` | PascalCase verb — use case action | `Create`, `Update`, `Approve`, `Reject`, `Submit`, `Suspend`, `Rotate`, `Inquire`, `Delete`, `Verify`, `Confirm` |
 | `{Suffix}` | PascalCase role for Service classes | `Creator`, `Updater`, `Registrar`, `Rotator`, `Checker`, `Generator`, `Inquirer`, `Processor`, `Factory` |
-| `{stream_name}` | kebab-case — Kafka/event stream topic | `ewa-employer-events`, `loan-account-events` |
-| `{event_name}` | dot-notation — event type identifier | `ewa.employer.approved`, `loan.account.opened` |
-| `{schema}` | snake_case — DB schema name | `public`, `ewa`, `loan` |
+| `{stream_name}` | kebab-case — Kafka/event stream topic | `user-events`, `order-events` |
+| `{event_name}` | dot-notation — event type identifier | `user.created`, `order.placed` |
+| `{schema}` | snake_case — DB schema name | `public`, `app`, `inventory` |
 
 ## Project Init
 
@@ -150,7 +150,7 @@ For full code templates, see [references/patterns.md](references/patterns.md).
 | `Processor` | Processes files / data | `EmployeeApplicationFileProcessor`, `RiskAssessmentProcessor` |
 | `Factory` | Constructs complex aggregates | `DocumentTemplateFactory`, `CommissionerFactory` |
 | `Inquirer` | Read-only inquiry / lookup | `EmployeeApplicationAccountInquirer` |
-| `Service` | Multi-purpose per aggregate | `BillingService`, `LoanProductService`, `WebhookService` |
+| `Service` | Multi-purpose per aggregate | `BillingService`, `PaymentService`, `WebhookService` |
 | `Confirmer` | Confirms / cancels operations | `WithdrawalConfirmer` |
 
 ### Transaction Management

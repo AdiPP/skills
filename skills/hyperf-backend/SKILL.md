@@ -13,11 +13,11 @@ When applying this skill, replace:
 
 | Placeholder | Format | Example |
 |-------------|--------|---------|
-| `{ProjectName}` | PascalCase — used in PHP namespaces | `MagangHub`, `Saridana`, `Naker` |
-| `{project-name}` | kebab-case — used in DB names, Kafka group, Docker names | `maganghub`, `saridana`, `naker` |
-| `{project_name}` | snake_case — used in DB schema, prefix, env vars | `maganghub`, `saridana` |
+| `{ProjectName}` | PascalCase — used in PHP namespaces | `AcmeCorp`, `MyPlatform`, `SampleApp` |
+| `{project-name}` | kebab-case — used in DB names, Kafka group, Docker names | `acmecorp`, `myplatform`, `sampleapp` |
+| `{project_name}` | snake_case — used in DB schema, prefix, env vars | `acmecorp`, `myplatform` |
 | `{Domain}` | PascalCase — bounded context name | `Identity`, `Vacancy`, `Payment` |
-| `{service}` | kebab-case — service identifier | `vacancy`, `auth`, `loan` |
+| `{service}` | kebab-case — service identifier | `catalog`, `auth`, `payment` |
 | `{Name}` / `{Entity}` | PascalCase — entity / aggregate name | `Program`, `User` |
 | `{Action}` | PascalCase verb — use case action | `Create`, `Update`, `Verify`, `Approve`, `Reject`, `Cancel`, `Search`, `Rotate`, `Submit` |
 | `{Suffix}` | PascalCase role for Service classes | `Creator`, `Updater`, `Verifier`, `Rotator`, `Checker`, `Manager`, `Resolver`, `Approver` |
